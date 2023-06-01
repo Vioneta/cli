@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches: ["master"]
+  release:
+    types: ["published"]
+  pull_request:
+    branches: ["master"]
+
+env:
+  GOLANG_VERSION: "1.19"
+
+jobs:
+  build:
+    name: Build ${{ matrix.variant.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant:
+          - {"name": "ha_i386", "args": "GOARCH=386"}
+          - {"name": "ha_amd64", "args": "GOARCH=amd64"}
+          - {"name": "ha_armhf", "args": "GOARM=6 GOARCH=arm"}
+          - {"name": "ha_armv7", "args": "GOARM=7 GOARCH=arm"}
+          - {"name": "ha_aarch64", "args": "GOARCH=arm64"}
+    steps:
+    - name: Checkout the repository
+      uses: actions/checkout@v3.5.2
+
+    - name: Setup go ${{ env.GOLANG_VERSION }}
+      uses: actions/setup-go@v4.0.1
+      with:
+        go-version: ${{ env.GOLANG_VERSION }}
+
+    - name: Build ${{ matrix.variant.name }}
+      run: CGO_ENABLED=0 ${{ matrix.variant.args }} go build -ldflags="-s -w" -o "${{ matrix.variant.name }}"
+
+    - name: Upload release asset
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: "${{ github.workspace }}/${{ matrix.variant.name }}"
+        asset_name: ${{ matrix.variant.name }}
+        asset_content_type: application/x-binary
+
+    # - name: Signing asset
+    #   if: github.event_name == 'release'
+    #   uses: home-assistant/actions/helpers/codenotary@master
+    #   with:
+    #     source: "file://${{ github.workspace }}/${{ matrix.variant.name }}"
+    #     token: ${{ secrets.CAS_TOKEN }}
